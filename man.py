@@ -27,25 +27,35 @@ app.add_middleware(
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # ----------------------------------------------------
-# Load CNN (ResNet50)
+# Load CNN (PyTorch ResNet50)
 # ----------------------------------------------------
 CNN_MODEL_PATH = "resnet50_coral.pth"
+NUM_CLASSES = 2
 
-cnn_model = models.resnet50(weights=None)
-cnn_model.fc = torch.nn.Linear(cnn_model.fc.in_features, 2)
+loaded = torch.load(
+    CNN_MODEL_PATH,
+    map_location=DEVICE,
+    weights_only=False   # REQUIRED for legacy models
+)
 
-cnn_model.load_state_dict(torch.load(CNN_MODEL_PATH, map_location=DEVICE))
+if isinstance(loaded, dict):
+    cnn_model = models.resnet50(weights=None)
+    cnn_model.fc = torch.nn.Linear(cnn_model.fc.in_features, NUM_CLASSES)
+    cnn_model.load_state_dict(loaded)
+else:
+    cnn_model = loaded
+
 cnn_model.to(DEVICE)
 cnn_model.eval()
 
-CLASS_LABELS = ["Healthy Coral", "Bleached Coral"]
+# IMPORTANT: match training order
+CLASS_LABELS = ["Bleached Coral", "Healthy Coral"]
 
 # ----------------------------------------------------
 # Load XGBoost + metadata
 # ----------------------------------------------------
 xgb_model = joblib.load("xgboost_env_severity_model.pkl")
-label_encoder = joblib.load("label_encoder.pkl")
-train_columns = joblib.load("train_columns.pkl")
+train_columns = joblib.load("train_columns-2.pkl")
 
 # ----------------------------------------------------
 # Image preprocessing
@@ -66,7 +76,7 @@ def preprocess_image(uploaded_file: UploadFile):
     return img.to(DEVICE)
 
 # ----------------------------------------------------
-# Fusion logic (LOCKED)
+# Fusion logic (FIXED & CONSISTENT)
 # ----------------------------------------------------
 def fuse_severity(P_img_bleached: float, P_Severe_env: float):
     if P_img_bleached < 0.5:
@@ -97,7 +107,7 @@ async def analyze_coral(
     Turbidity: float = Form(...),
     Cyclone_Frequency: float = Form(...),
     Abs_Latitude: float = Form(...),
-    Exposure: int = Form(...),        # 0 = Sheltered, 1 = Exposed
+    Exposure: int = Form(...),
     Date_Month: int = Form(...),
     Date_Year: int = Form(...)
 ):
@@ -106,8 +116,10 @@ async def analyze_coral(
     with torch.no_grad():
         logits = cnn_model(img_tensor)
         probs = F.softmax(logits, dim=1)
+
+        # Index 0 = Bleached
+        P_img_bleached = float(probs[0][0])
         idx = int(torch.argmax(probs, dim=1))
-        P_img_bleached = float(probs[0][1].item())
 
     coral_status = CLASS_LABELS[idx]
 
@@ -129,7 +141,6 @@ async def analyze_coral(
 
     X = pd.DataFrame([input_data])[train_columns]
     probs_env = xgb_model.predict_proba(X)
-
     P_Severe_env = float(probs_env[0][1])
 
     # -------- Fusion --------
@@ -137,8 +148,8 @@ async def analyze_coral(
 
     return {
         "image_prediction": coral_status,
-        "image_bleaching_probability": round(P_img_bleached, 3),
-        "environment_severe_probability": round(P_Severe_env, 3),
+        "image_bleaching_probability": round(P_img_bleached, 4),
+        "environment_severe_probability": round(P_Severe_env, 4),
         "final_severity": severity_label,
         "severity_code": severity_int
     }
@@ -148,7 +159,4 @@ async def analyze_coral(
 # ----------------------------------------------------
 @app.get("/")
 def root():
-    return {
-        "message": "DeepReef AI backend running",
-        "endpoint": "/analyze_coral"
-    }
+    return {"status": "DeepReef AI backend running"}
