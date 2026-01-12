@@ -1,0 +1,188 @@
+/* CSS Reset - Removes the gap at the bottom and edges */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --ocean-light: #e0f7fa;
+    --ocean-deep: #006064;
+    --accent-coral: #ff7f50;
+    --gemini-cyan: #00bcd4;
+    --white-glass: rgba(255, 255, 255, 0.15);
+}
+
+body {
+    font-family: 'Segoe UI', Roboto, sans-serif;
+    /* Fixed background prevents color change/stretching on scroll */
+    background: linear-gradient(180deg, #b2ebf2 0%, #00acc1 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    overflow-x: hidden;
+    color: white;
+}
+
+/* Logo */
+.logo {
+    position: fixed;
+    top: 25px;
+    left: 30px;
+    font-size: 1.6rem;
+    font-weight: 800;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    z-index: 100;
+}
+.logo {
+    font-family: 'Judson', serif;
+    font-size: 3rem;
+    color: white;
+}
+
+/* Layout Container */
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 25px;
+    padding: 80px 20px;
+    position: relative;
+    z-index: 10;
+}
+
+/* Cards Base */
+.upload-card, .result-card, .map-card, .fact-box {
+    background: var(--white-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* Upload Section */
+.upload-card {
+    padding: 30px;
+    width: 100%;
+    max-width: 500px;
+    text-align: center;
+}
+
+.drop-zone {
+    height: 150px;
+    border: 2px dashed rgba(255,255,255,0.5);
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 20px 0;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background: var(--accent-coral);
+    border: none;
+    padding: 12px 30px;
+    border-radius: 30px;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.btn-primary:hover {
+    transform: scale(1.05);
+    background: #ff6a33;
+}
+
+/* Fact Box */
+.fact-box {
+    padding: 15px 25px;
+    width: 100%;
+    max-width: 500px;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.fact-label { font-weight: bold; color: var(--ocean-light); display: block; }
+
+/* Analysis Results Wrapper */
+.results-wrapper {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    width: 100%;
+    max-width: 900px;
+}
+
+.result-card {
+    flex: 1;
+    padding: 25px;
+    position: relative;
+    min-height: 200px;
+}
+
+.card-badge {
+    position: absolute;
+    top: -12px;
+    left: 20px;
+    background: var(--accent-coral);
+    padding: 4px 12px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    z-index: 5;
+}
+
+.gemini-box .card-badge { background: var(--gemini-cyan); }
+
+.placeholder-text { opacity: 0.6; font-style: italic; }
+
+/* Map Section */
+.map-card {
+    width: 100%;
+    max-width: 900px;
+    padding: 20px;
+    margin-bottom: 50px;
+}
+
+#map { height: 350px; width: 100%; border-radius: 15px; background: rgba(0, 77, 64, 0.5); }
+
+/* Bubbles Fix */
+.bubbles {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.bubble {
+    position: absolute;
+    bottom: -100px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 50%;
+    animation: rise 15s infinite ease-in;
+}
+
+/* Custom bubble sizes and positions */
+.bubble:nth-child(1) { width: 40px; height: 40px; left: 10%; animation-duration: 8s; }
+.bubble:nth-child(2) { width: 20px; height: 20px; left: 30%; animation-duration: 12s; animation-delay: 2s; }
+.bubble:nth-child(3) { width: 50px; height: 50px; left: 70%; animation-duration: 15s; }
+.bubble:nth-child(4) { width: 80px; height: 80px; left: 40%; animation-duration: 20s; animation-delay: 5s; }
+.bubble:nth-child(5) { width: 30px; height: 30px; left: 90%; animation-duration: 10s; animation-delay: 1s; }
+
+@keyframes rise {
+    0% { transform: translateY(0); opacity: 0; }
+    20% { opacity: 0.5; }
+    80% { opacity: 0.5; }
+    100% { transform: translateY(-120vh); opacity: 0; }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .results-wrapper { flex-direction: column; }
+    .logo { position: static; text-align: center; padding-bottom: 20px; }
+}

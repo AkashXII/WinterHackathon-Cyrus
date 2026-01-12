@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepReef-Ai | Marine Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Judson:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="bubbles">
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+    </div>
+
+    <div class="logo">DeepReef-Ai</div>
+
+    <main class="container">
+        <div class="upload-card">
+            <h1>Coral Bleaching Detector</h1>
+            <p>Upload a reef image for professional AI analysis.</p>
+            
+            <div class="drop-zone" id="drop-zone">
+                <span class="drop-zone__prompt">Drop image here or click to upload</span>
+                <input type="file" name="myFile" class="drop-zone__input" id="imageInput" accept="image/*">
+            </div>
+
+            <button id="analyze-btn" class="btn-primary">Analyze Reef Health</button>
+        </div>
+
+        <div id="fact-container" class="fact-box">
+            <span class="fact-label">Did you know?</span>
+            <p id="random-fact">Corals are actually animals, not plants!</p>
+        </div>
+
+        <div id="analysis-section" class="results-wrapper">
+            <div class="result-card model-box">
+                <div class="card-badge">Scientific Model</div>
+                <h3>Bleaching Analysis</h3>
+                <div id="model-output" class="output-content">
+                    <p class="placeholder-text">Awaiting data...</p>
+                </div>
+            </div>
+
+            <div class="result-card gemini-box">
+                <div class="card-badge">Gemini AI</div>
+                <h3>Marine Expert View</h3>
+                <div id="gemini-output" class="output-content">
+                    <p class="placeholder-text">Awaiting consultation...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="map-container" class="map-card">
+            <h3>Global Endangered Reefs</h3>
+            <div id="map"></div>
+        </div>
+    </main>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
