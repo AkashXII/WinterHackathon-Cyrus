@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
+import io
 
 import torch
 import torch.nn.functional as F
@@ -10,20 +11,26 @@ from torchvision import models, transforms
 import pandas as pd
 import joblib
 from PIL import Image
-import io
+from dotenv import load_dotenv
+
+print(">>> BEFORE load_dotenv:", os.getenv("GEMINI_API_KEY"))
+load_dotenv()
+print(">>> AFTER load_dotenv:", os.getenv("GEMINI_API_KEY"))
 
 # ----------------------------------------------------
-# Optional Gemini (safe)
+# Gemini setup (FIXED)
 # ----------------------------------------------------
-try:
-    import google.generativeai as genai
-    GEMINI_API_KEY = "AIzaSyBwEQJ3mlHKD0yE51z0gBI90F6zhnOrpyg"
-    if GEMINI_API_KEY:
-        genai.configure(api_key=GEMINI_API_KEY)
-    else:
-        genai = None
-except Exception:
-    genai = None
+import google.generativeai as genai
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if GEMINI_API_KEY and GEMINI_API_KEY.strip():
+    genai.configure(api_key=GEMINI_API_KEY)
+    GEMINI_ENABLED = True
+else:
+    GEMINI_ENABLED = False
+
+print(f"[STARTUP] Gemini enabled: {GEMINI_ENABLED}")
 
 # ----------------------------------------------------
 # FastAPI setup
@@ -52,7 +59,7 @@ NUM_CLASSES = 2
 loaded = torch.load(
     CNN_MODEL_PATH,
     map_location=DEVICE,
-    weights_only=False  # REQUIRED for PyTorch 2.6 legacy models
+    weights_only=False
 )
 
 if isinstance(loaded, dict):
@@ -65,7 +72,6 @@ else:
 cnn_model.to(DEVICE)
 cnn_model.eval()
 
-# IMPORTANT: matches common training order
 CLASS_LABELS = ["Bleached Coral", "Healthy Coral"]
 
 # ----------------------------------------------------
@@ -86,14 +92,14 @@ image_transform = transforms.Compose([
     )
 ])
 
-def preprocess_image(uploaded_file: UploadFile):
-    img_bytes = uploaded_file.file.read()
+async def preprocess_image(uploaded_file: UploadFile):
+    img_bytes = await uploaded_file.read()
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
     img = image_transform(img).unsqueeze(0)
     return img.to(DEVICE)
 
 # ----------------------------------------------------
-# Fusion logic (FINAL)
+# Fusion logic
 # ----------------------------------------------------
 def fuse_severity(P_img_bleached: float, P_Severe_env: float):
     if P_img_bleached < 0.5:
@@ -128,19 +134,16 @@ async def analyze_coral(
     Date_Month: int = Form(...),
     Date_Year: int = Form(...)
 ):
-    # -------- Image inference --------
-    img_tensor = preprocess_image(file)
+    img_tensor = await preprocess_image(file)
+
     with torch.no_grad():
         logits = cnn_model(img_tensor)
         probs = F.softmax(logits, dim=1)
-
-        # index 0 = Bleached
         P_img_bleached = float(probs[0][0])
         idx = int(torch.argmax(probs, dim=1))
 
     coral_status = CLASS_LABELS[idx]
 
-    # -------- Tabular inference --------
     input_data = {
         "Thermal_Stress_Index": Thermal_Stress_Index,
         "TSA_DHWMean": TSA_DHWMean,
@@ -160,33 +163,27 @@ async def analyze_coral(
     probs_env = xgb_model.predict_proba(X)
     P_Severe_env = float(probs_env[0][1])
 
-    # -------- Fusion --------
     severity_int, severity_label = fuse_severity(P_img_bleached, P_Severe_env)
 
-    # -------- Optional Gemini explanation --------
-    explanation = "Gemini explanation not enabled."
-
-    if genai:
-        prompt = f"""
-        A coral reef monitoring system produced the following:
-
-        Visual bleaching probability: {P_img_bleached:.2f}
-        Environmental severe stress probability: {P_Severe_env:.2f}
-
-        Thermal stress index: {Thermal_Stress_Index}
-        Bleaching duration (weeks): {Bleaching_Duration_weeks}
-        Mean temperature: {Temperature_Mean}
-
-        Final severity classification: {severity_label}
-
-        Provide a concise scientific explanation (3–4 sentences).
-        """
+    if GEMINI_ENABLED:
         try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
+            model = genai.GenerativeModel("models/gemini-flash-lite-latest")
+            prompt = f"""
+            Visual bleaching probability: {P_img_bleached:.2f}
+            Environmental severe stress probability: {P_Severe_env:.2f}
+            Final severity classification: {severity_label}
+
+            Explain the result in 3 short scientific sentences.
+            """
             response = model.generate_content(prompt)
             explanation = response.text
-        except Exception:
-            explanation = "Gemini explanation failed."
+            gemini_status = "USED"
+        except Exception as e:
+            explanation = f"Gemini error: {str(e)}"
+            gemini_status = "FAILED"
+    else:
+        explanation = "Gemini disabled (API key not detected)"
+        gemini_status = "DISABLED"
 
     return {
         "fusion_model_result": {
@@ -196,51 +193,41 @@ async def analyze_coral(
             "final_severity": severity_label,
             "severity_code": severity_int
         },
-        "gemini_explanation": explanation
+        "gemini": {
+            "status": gemini_status,
+            "enabled_at_startup": GEMINI_ENABLED,
+            "explanation": explanation
+        }
     }
 @app.get("/coral_facts")
 def coral_facts():
     try:
-        prompt = """
-        Provide exactly 3 concise, scientifically accurate facts about coral reefs.
-        Each fact should be 1 sentence long.
-        Avoid emojis, headings, or numbering.
-        """
+        prompt = (
+            "Provide exactly 3 concise, scientifically accurate facts about coral reefs. "
+            "Each fact must be one sentence. Do not number them."
+        )
 
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("models/gemini-flash-lite-latest")
         response = model.generate_content(prompt)
 
-        # Split into lines and clean
-        raw_text = response.text.strip()
-        lines = [line.strip("-• ").strip() for line in raw_text.split("\n") if line.strip()]
+        if hasattr(response, "text") and response.text:
+            lines = response.text.strip().split("\n")
+        else:
+            lines = response.candidates[0].content.parts[0].text.split("\n")
 
-        # Fallback safety
-        facts = lines[:3] if len(lines) >= 3 else [
-            "Coral reefs support nearly 25% of all marine species despite covering less than 1% of the ocean floor.",
-            "Coral bleaching occurs when corals expel their symbiotic algae due to stress, often caused by rising sea temperatures.",
-            "Healthy coral reefs act as natural barriers, protecting coastlines from storms and erosion."
-        ]
+        facts = [l.strip("-• ").strip() for l in lines if l.strip()][:3]
 
         return {"facts": facts}
 
     except Exception as e:
+        print("❌ Gemini facts error:", repr(e))
         return {
             "facts": [
                 "Coral reefs are among the most biodiverse ecosystems on Earth.",
-                "Rising ocean temperatures are the leading cause of mass coral bleaching events.",
-                "Protecting coral reefs helps sustain fisheries and coastal communities."
+                "Rising ocean temperatures are the leading cause of coral bleaching.",
+                "Healthy coral reefs protect coastlines from erosion and storms."
             ]
         }
-
-# ----------------------------------------------------
-# Root endpoint
-# ----------------------------------------------------
 @app.get("/")
 def root():
     return {"status": "DeepReef backend running"}
-
-# ----------------------------------------------------
-# Run
-# ----------------------------------------------------
-if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
